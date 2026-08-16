@@ -8,7 +8,7 @@ function Login() {
     <div className="min-h-screen flex">
 
 
-      {/* Left Branding Section */}
+
 
       <div className="hidden lg:flex lg:w-1/2 bg-linear-to-br from-secondary to-blue-900 text-white items-center justify-center p-12">
 
@@ -36,39 +36,21 @@ function Login() {
           <div className="mt-8 space-y-4">
 
 
-            <div className="
-  bg-white/10 
-  p-4 
-  rounded-xl
-  transition
-  duration-300
-  hover:-translate-y-1
-  hover:bg-white/20
-  hover:shadow-lg
-">
+            <div className=" bg-white/10 p-4 rounded-xl transition duration-300 hover:-translate-y-1 hover:bg-white/20  hover:shadow-lg">
 
               ✓ Faster customer checkout
 
             </div>
 
 
-            <div className="
-  bg-white/10 
-  p-4 
-  rounded-xl
-  transition
-  duration-300
-  hover:-translate-y-1
-  hover:bg-white/20
-  hover:shadow-lg
-">
+            <div className="  bg-white/10 p-4 rounded-xl transition duration-300 hover:-translate-y-1 hover:bg-white/20  hover:shadow-lg">
 
               ✓ Product and order management
 
             </div>
 
 
-            <div  className=" bg-white/10  p-4 rounded-xl transition duration-300 hover:-translate-y-1 hover:bg-white/20 hover:shadow-lg">
+            <div className=" bg-white/10  p-4 rounded-xl transition duration-300 hover:-translate-y-1 hover:bg-white/20 hover:shadow-lg">
 
               ✓ Business analytics dashboard
 

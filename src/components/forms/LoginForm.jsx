@@ -42,7 +42,7 @@ function LoginForm() {
 
     };
     const handleSubmit = async (e) => {
-          setErrorMessage("");
+        setErrorMessage("");
 
 
         e.preventDefault();
@@ -95,20 +95,7 @@ function LoginForm() {
     };
 
     return (
-        <form action="" onSubmit={handleSubmit} className="
-    w-full
-    max-w-md
-    bg-card
-    rounded-2xl
-    shadow-2xl
-    border
-    border-gray-100
-    p-10
-    transition
-    duration-300
-    hover:-translate-y-2
-    hover:shadow-2xl
-  ">
+        <form action="" onSubmit={handleSubmit} className=" w-full max-w-md bg-card   rounded-2xl  shadow-2xl border  border-gray-100  p-10 transition duration-300 hover:-translate-y-2  hover:shadow-2xl ">
 
             <h2 className="text-4xl font-bold text-text">Welcome Back</h2>
 
@@ -133,7 +120,7 @@ function LoginForm() {
                         onChange={(e) => {
 
                             setEmail(e.target.value);
-                             setErrorMessage("");
+                            setErrorMessage("");
 
 
                             if (errors.email) {
@@ -177,7 +164,7 @@ function LoginForm() {
                         onChange={(e) => {
 
                             setPassword(e.target.value);
-                             setErrorMessage("");
+                            setErrorMessage("");
 
 
                             if (errors.password) {
@@ -207,14 +194,7 @@ function LoginForm() {
 
                         <EyeOff
                             onClick={() => setShowPassword(false)}
-                            className="
-      absolute
-      right-4
-      top-1/2
-      -translate-y-1/2
-      text-gray-400
-      cursor-pointer
-    "
+                            className=" absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 cursor-pointer "
                             size={20}
                         />
 
@@ -222,14 +202,7 @@ function LoginForm() {
 
                         <Eye
                             onClick={() => setShowPassword(true)}
-                            className="
-      absolute
-      right-4
-      top-1/2
-      -translate-y-1/2
-      text-gray-400
-      cursor-pointer
-    "
+                            className=" absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 cursor-pointer "
                             size={20}
                         />
 
@@ -237,7 +210,11 @@ function LoginForm() {
                 </div>
             </div>
             <div className="flex justify-end mt-3">
-                <button className="text-sm text-secondary hover:underline">
+                <button
+                    type="button"
+                    onClick={() => navigate("/forgot-password")}
+                    className="text-sm text-secondary hover:underline"
+                >
                     Forgot Password?
                 </button>
             </div>
@@ -249,27 +226,13 @@ function LoginForm() {
             <button
                 type="submit"
                 disabled={loading}
-                className="
-w-full
-mt-8
-bg-primary
-text-white
-py-3.5
-rounded-xl
-font-semibold
-shadow-md
-transition
-hover:shadow-lg
-hover:-translate-y-0.5
-disabled:opacity-70
-disabled:cursor-not-allowed
-"
+                className="w-full mt-8 bg-primary text-white py-3.5 rounded-xl font-semibold shadow-md transition hover:shadow-lg hover:-translate-y-0.5 disabled:opacity-70 disabled:cursor-not-allowed"
             >
                 {loading ? "Logging in..." : "Login"}
             </button>
             <p className="text-center mt-6 text-gray-600">
                 Don't have an account?
-                <button className="ml-2 text-secondary font-semibold hover:underline">
+                <button type="button" onClick={() => navigate("/signup")} className="ml-2 text-secondary font-semibold hover:underline">
                     Sign Up
                 </button>
             </p>
