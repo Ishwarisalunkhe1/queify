@@ -3,14 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <script>
-      const path = window.location.pathname;
-      const search = window.location.search;
-      const hash = window.location.hash;
+      const redirect = window.location.pathname +
+        window.location.search +
+        window.location.hash;
 
-      sessionStorage.setItem(
-        "redirect",
-        path + search + hash
-      );
+      sessionStorage.setItem("redirect", redirect);
 
       window.location.replace("/queify/");
     </script>
