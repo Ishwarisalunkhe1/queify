@@ -8,6 +8,11 @@ import Dashboard from "../pages/dashboard/Dashboard";
 import ProtectedRoute from '../components/auth/ProtectedRoute'
 import BusinessSignup from "../pages/auth/BusinessSignup";
 import VerifyEmail from "../pages/auth/VerifyEmail";
+import Products from "../pages/products/Products";
+import AddProduct from "../pages/products/AddProduct";
+import Brands from "../pages/products/Brands";
+import Categories from "../pages/products/Categories";
+import BulkUpload from "../pages/products/BulkUpload";
 
 function AppRoutes() {
   return (
@@ -26,6 +31,55 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Dashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/products"
+        element={
+          <ProtectedRoute>
+            <Products />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/products/add"
+        element={
+          <ProtectedRoute>
+            <AddProduct />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/products/brands"
+        element={
+          <ProtectedRoute>
+            <Brands />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/products/categories"
+        element={
+          <ProtectedRoute>
+            <Categories />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/categories"
+        element={
+          <ProtectedRoute>
+            <Categories />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/products/bulk-upload"
+        element={
+          <ProtectedRoute>
+            <BulkUpload />
           </ProtectedRoute>
         }
       />

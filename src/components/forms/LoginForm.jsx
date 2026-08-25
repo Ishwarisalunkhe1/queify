@@ -73,14 +73,12 @@ function LoginForm() {
         }
         catch (error) {
 
-
             if (error.message === "Invalid login credentials") {
                 setErrorMessage("Invalid email or password");
             }
             else {
-                setErrorMessage("Something went wrong. Please try again.");
+                setErrorMessage(error.message);
             }
-
 
         }
         finally {
