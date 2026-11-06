@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
@@ -32,6 +33,10 @@ function AddProduct() {
 
             const businessId = await getCurrentBusinessId();
 
+            if (!businessId) {
+                throw new Error("Business could not be identified.");
+            }
+
             const [
                 { data: brandData, error: brandError },
                 { data: categoryData, error: categoryError },
@@ -49,23 +54,14 @@ function AddProduct() {
                     .order("name"),
             ]);
 
-            if (brandError) {
-                throw brandError;
-            }
-
-            if (categoryError) {
-                throw categoryError;
-            }
+            if (brandError) throw brandError;
+            if (categoryError) throw categoryError;
 
             setBrands(brandData || []);
             setCategories(categoryData || []);
-
         } catch (error) {
             console.error("Fetch options error:", error);
-
-            setError(
-                error.message || "Failed to load brands and categories."
-            );
+            setError(error.message || "Failed to load brands and categories.");
         } finally {
             setLoadingOptions(false);
         }
@@ -76,6 +72,9 @@ function AddProduct() {
 
         setError("");
         setSuccess("");
+
+        const quantity = Number(stock);
+        const productPrice = Number(price);
 
         if (!name.trim()) {
             setError("Product name is required.");
@@ -92,13 +91,17 @@ function AddProduct() {
             return;
         }
 
-        if (price === "" || Number(price) < 0) {
+        if (price === "" || !Number.isFinite(productPrice) || productPrice < 0) {
             setError("Please enter a valid price.");
             return;
         }
 
-        if (stock === "" || Number(stock) < 0) {
-            setError("Please enter a valid stock quantity.");
+        if (
+            stock === "" ||
+            !Number.isInteger(quantity) ||
+            quantity < 0
+        ) {
+            setError("Please enter a valid whole-number stock quantity.");
             return;
         }
 
@@ -107,27 +110,60 @@ function AddProduct() {
 
             const businessId = await getCurrentBusinessId();
 
-            const { data, error } = await supabase
+            if (!businessId) {
+                throw new Error("Business could not be identified.");
+            }
+
+            // First create the product.
+            const { data: product, error: productError } = await supabase
                 .from("products")
                 .insert({
                     business_id: businessId,
                     brand_id: brandId,
                     category_id: categoryId,
                     name: name.trim(),
-                    price: Number(price),
-                    stock: Number(stock),
+                    price: productPrice,
+                    stock: quantity,
                 })
                 .select()
                 .single();
 
-            if (error) {
-                throw error;
+            if (productError) throw productError;
+
+            // Automatically create one barcode inventory row per unit.
+            if (quantity > 0) {
+                const { error: inventoryError } = await supabase.rpc(
+                    "add_inventory_units",
+                    {
+                        p_product_id: product.id,
+                        p_quantity: quantity,
+                    }
+                );
+
+                if (inventoryError) {
+                    // Remove only the product created in this attempt.
+                    const { error: rollbackError } = await supabase
+                        .from("products")
+                        .delete()
+                        .eq("id", product.id)
+                        .eq("business_id", businessId);
+
+                    if (rollbackError) {
+                        throw new Error(
+                            `Inventory generation failed: ${inventoryError.message}. ` +
+                            `The product record could not be rolled back: ${rollbackError.message}. ` +
+                            `Please check this product before retrying.`
+                        );
+                    }
+
+                    throw new Error(
+                        `Barcode generation failed. The newly created product was rolled back. ${inventoryError.message}`
+                    );
+                }
             }
 
-            console.log("Product created:", data);
-
             setSuccess(
-                `Product added successfully. Product ID: ${data.id}`
+                `Product added successfully! ${quantity} physical inventory unit(s) created with unique barcodes.`
             );
 
             setName("");
@@ -138,10 +174,7 @@ function AddProduct() {
 
         } catch (error) {
             console.error("Add product error:", error);
-
-            setError(
-                error.message || "Failed to add product."
-            );
+            setError(error.message || "Failed to add product.");
         } finally {
             setLoading(false);
         }
@@ -149,7 +182,6 @@ function AddProduct() {
 
     return (
         <div className="min-h-screen bg-background p-8">
-
             <div className="max-w-2xl mx-auto">
 
                 <button
@@ -164,14 +196,13 @@ function AddProduct() {
                 </h1>
 
                 <p className="mt-2 text-gray-500">
-                    Add a new product to your inventory.
+                    Add a product and automatically generate its physical inventory barcodes.
                 </p>
 
                 <form
                     onSubmit={handleSubmit}
                     className="mt-8 bg-card rounded-2xl border border-gray-100 shadow-sm p-8"
                 >
-
                     <div>
                         <label className="block text-sm font-medium text-text mb-2">
                             Product Name
@@ -198,16 +229,11 @@ function AddProduct() {
                             className="w-full rounded-xl border border-gray-300 px-4 py-3 bg-white outline-none focus:border-primary focus:ring-4 focus:ring-primary/20"
                         >
                             <option value="">
-                                {loadingOptions
-                                    ? "Loading brands..."
-                                    : "Select Brand"}
+                                {loadingOptions ? "Loading brands..." : "Select Brand"}
                             </option>
 
                             {brands.map((brand) => (
-                                <option
-                                    key={brand.id}
-                                    value={brand.id}
-                                >
+                                <option key={brand.id} value={brand.id}>
                                     {brand.name}
                                 </option>
                             ))}
@@ -226,16 +252,11 @@ function AddProduct() {
                             className="w-full rounded-xl border border-gray-300 px-4 py-3 bg-white outline-none focus:border-primary focus:ring-4 focus:ring-primary/20"
                         >
                             <option value="">
-                                {loadingOptions
-                                    ? "Loading categories..."
-                                    : "Select Category"}
+                                {loadingOptions ? "Loading categories..." : "Select Category"}
                             </option>
 
                             {categories.map((category) => (
-                                <option
-                                    key={category.id}
-                                    value={category.id}
-                                >
+                                <option key={category.id} value={category.id}>
                                     {category.name}
                                 </option>
                             ))}
@@ -260,7 +281,7 @@ function AddProduct() {
 
                     <div className="mt-5">
                         <label className="block text-sm font-medium text-text mb-2">
-                            Stock
+                            Initial Stock Quantity
                         </label>
 
                         <input
@@ -272,6 +293,10 @@ function AddProduct() {
                             placeholder="e.g. 50"
                             className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:border-primary focus:ring-4 focus:ring-primary/20"
                         />
+
+                        <p className="mt-2 text-xs text-gray-500">
+                            Each unit will automatically receive its own barcode in Inventory.
+                        </p>
                     </div>
 
                     {error && (
@@ -291,13 +316,10 @@ function AddProduct() {
                         disabled={loading || loadingOptions}
                         className="w-full mt-8 bg-primary text-white py-3.5 rounded-xl font-semibold disabled:opacity-70"
                     >
-                        {loading ? "Adding Product..." : "Add Product"}
+                        {loading ? "Creating Product & Barcodes..." : "Add Product"}
                     </button>
-
                 </form>
-
             </div>
-
         </div>
     );
 }

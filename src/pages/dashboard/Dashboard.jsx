@@ -33,11 +33,16 @@ function Dashboard() {
        * TOTAL PRODUCTS
        */
 
-      const { count: productCount, error: productCountError } =
-        await supabase
-          .from("products")
-          .select("id", { count: "exact", head: true })
-          .eq("business_id", businessId);
+      const {
+        count: productCount,
+        error: productCountError,
+      } = await supabase
+        .from("products")
+        .select("id", {
+          count: "exact",
+          head: true,
+        })
+        .eq("business_id", businessId);
 
       if (productCountError) {
         throw productCountError;
@@ -46,35 +51,41 @@ function Dashboard() {
       setTotalProducts(productCount || 0);
 
       /*
-       * TOTAL STOCK
+       * TOTAL AVAILABLE PHYSICAL INVENTORY UNITS
        */
 
-      const { data: stockData, error: stockError } =
-        await supabase
-          .from("products")
-          .select("stock")
-          .eq("business_id", businessId);
+      const {
+        count: availableCount,
+        error: inventoryCountError,
+      } = await supabase
+        .from("product_inventory")
+        .select("id", {
+          count: "exact",
+          head: true,
+        })
+        .eq("business_id", businessId)
+        .eq("status", "available");
 
-      if (stockError) {
-        throw stockError;
+      if (inventoryCountError) {
+        throw inventoryCountError;
       }
 
-      const stockTotal = (stockData || []).reduce(
-        (total, product) => total + (product.stock || 0),
-        0
-      );
-
-      setTotalStock(stockTotal);
+      setTotalStock(availableCount || 0);
 
       /*
        * TOTAL CATEGORIES
        */
 
-      const { count: categoryCount, error: categoryCountError } =
-        await supabase
-          .from("categories")
-          .select("id", { count: "exact", head: true })
-          .eq("business_id", businessId);
+      const {
+        count: categoryCount,
+        error: categoryCountError,
+      } = await supabase
+        .from("categories")
+        .select("id", {
+          count: "exact",
+          head: true,
+        })
+        .eq("business_id", businessId);
 
       if (categoryCountError) {
         throw categoryCountError;
@@ -86,31 +97,77 @@ function Dashboard() {
        * RECENT PRODUCTS
        */
 
-      const { data: recentProductData, error: recentProductError } =
-        await supabase
-          .from("products")
-          .select(`
-                        id,
-                        name,
-                        price,
-                        stock,
-                        created_at,
-                        brands (
-                            name
-                        ),
-                        categories (
-                            name
-                        )
-                    `)
-          .eq("business_id", businessId)
-          .order("created_at", { ascending: false })
-          .limit(5);
+      const {
+        data: recentProductData,
+        error: recentProductError,
+      } = await supabase
+        .from("products")
+        .select(`
+                    id,
+                    name,
+                    price,
+                    created_at,
+                    brands (
+                        name
+                    ),
+                    categories (
+                        name
+                    )
+                `)
+        .eq("business_id", businessId)
+        .order("created_at", {
+          ascending: false,
+        })
+        .limit(5);
 
       if (recentProductError) {
         throw recentProductError;
       }
 
-      setRecentProducts(recentProductData || []);
+      /*
+       * GET AVAILABLE UNITS FOR RECENT PRODUCTS
+       */
+
+      const recentProductIds = (recentProductData || []).map(
+        (product) => product.id
+      );
+
+      let stockCounts = {};
+
+      if (recentProductIds.length > 0) {
+        const {
+          data: inventoryData,
+          error: recentInventoryError,
+        } = await supabase
+          .from("product_inventory")
+          .select("product_id")
+          .eq("business_id", businessId)
+          .eq("status", "available")
+          .in("product_id", recentProductIds);
+
+        if (recentInventoryError) {
+          throw recentInventoryError;
+        }
+
+        stockCounts = (inventoryData || []).reduce(
+          (counts, item) => {
+            counts[item.product_id] =
+              (counts[item.product_id] || 0) + 1;
+
+            return counts;
+          },
+          {}
+        );
+      }
+
+      const productsWithStock = (recentProductData || []).map(
+        (product) => ({
+          ...product,
+          availableStock: stockCounts[product.id] || 0,
+        })
+      );
+
+      setRecentProducts(productsWithStock);
 
     } catch (error) {
       console.error("Dashboard data error:", error);
@@ -124,21 +181,23 @@ function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex">
+    <div className="flex min-h-screen bg-background">
 
       <Sidebar />
 
-      <main className="flex-1 p-8">
+      <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">
 
         <DashboardHeader />
 
         {error && (
-          <div className="mb-6 p-4 rounded-xl bg-red-50 text-red-600">
+          <div className="mb-6 rounded-xl bg-red-50 p-4 text-red-600">
             {error}
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* STAT CARDS */}
+
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
 
           <StatCard
             title="Total Products"
@@ -149,7 +208,7 @@ function Dashboard() {
           <StatCard
             title="Total Stock"
             value={loading ? "..." : totalStock}
-            description="Current available stock"
+            description="Available physical inventory units"
           />
 
           <StatCard
@@ -160,31 +219,30 @@ function Dashboard() {
 
         </div>
 
-        <div className="mt-8 bg-card rounded-2xl border border-gray-100 shadow-sm p-6">
+        {/* RECENT PRODUCTS */}
 
-          <div className="flex items-center justify-between">
+        <div className="mt-8 rounded-2xl border border-gray-100 bg-card p-4 shadow-sm sm:p-6">
 
-            <div>
-              <h3 className="text-xl font-bold text-text">
-                Recent Products
-              </h3>
+          <div>
+            <h3 className="text-xl font-bold text-text">
+              Recent Products
+            </h3>
 
-              <p className="mt-1 text-sm text-gray-500">
-                Your recently added products will appear here.
-              </p>
-            </div>
-
+            <p className="mt-1 text-sm text-gray-500">
+              Your recently added products and their current
+              available physical stock.
+            </p>
           </div>
 
           {loading ? (
 
-            <div className="mt-8 text-center py-12 text-gray-400">
+            <div className="mt-8 py-12 text-center text-gray-400">
               Loading recent products...
             </div>
 
           ) : recentProducts.length === 0 ? (
 
-            <div className="mt-8 text-center py-12 text-gray-400">
+            <div className="mt-8 py-12 text-center text-gray-400">
               No products added yet.
             </div>
 
@@ -192,30 +250,30 @@ function Dashboard() {
 
             <div className="mt-6 overflow-x-auto">
 
-              <table className="w-full">
+              <table className="w-full min-w-[650px]">
 
-                <thead className="bg-gray-50 border-y border-gray-200">
+                <thead className="border-y border-gray-200 bg-gray-50">
 
                   <tr>
 
-                    <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
                       Product
                     </th>
 
-                    <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
                       Brand
                     </th>
 
-                    <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
                       Category
                     </th>
 
-                    <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
                       Price
                     </th>
 
-                    <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">
-                      Stock
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+                      Available Stock
                     </th>
 
                   </tr>
@@ -231,24 +289,27 @@ function Dashboard() {
                       className="border-b border-gray-100"
                     >
 
-                      <td className="px-4 py-4 font-medium">
+                      <td className="px-4 py-4 font-medium text-text">
                         {product.name}
                       </td>
 
-                      <td className="px-4 py-4">
+                      <td className="px-4 py-4 text-gray-600">
                         {product.brands?.name || "-"}
                       </td>
 
-                      <td className="px-4 py-4">
+                      <td className="px-4 py-4 text-gray-600">
                         {product.categories?.name || "-"}
                       </td>
 
-                      <td className="px-4 py-4">
-                        ₹{product.price}
+                      <td className="px-4 py-4 text-gray-600">
+                        ₹
+                        {Number(
+                          product.price || 0
+                        ).toFixed(2)}
                       </td>
 
-                      <td className="px-4 py-4">
-                        {product.stock}
+                      <td className="px-4 py-4 font-semibold text-text">
+                        {product.availableStock}
                       </td>
 
                     </tr>

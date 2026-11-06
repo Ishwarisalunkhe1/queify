@@ -13,6 +13,8 @@ import AddProduct from "../pages/products/AddProduct";
 import Brands from "../pages/products/Brands";
 import Categories from "../pages/products/Categories";
 import BulkUpload from "../pages/products/BulkUpload";
+import Inventory from "../pages/inventory/Inventory";
+import Profile from "../pages/Profile";
 
 function AppRoutes() {
   return (
@@ -83,6 +85,15 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/inventory"
+        element={
+          <ProtectedRoute>
+            <Inventory />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="/profile" element={<Profile />} />
     </Routes>
   );
 }

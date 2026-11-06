@@ -1,9 +1,12 @@
-import { useEffect, useState } from "react";
-import Barcode from "react-barcode";
+import { useEffect, useState, useMemo } from "react";
+
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../../components/dashboard/Sidebar";
 import { supabase } from "../../lib/supabase";
 import { getCurrentBusinessId } from "../../services/businessService";
+import ProductFilters from "../../components/products/ProductFilters";
+import ProductTable from "../../components/products/ProductTable";
+import EditProductModal from "../../components/products/EditProductModal";
 
 function Products() {
     const navigate = useNavigate();
@@ -11,6 +14,16 @@ function Products() {
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
+
+    // Product filter state
+    const [search, setSearch] = useState("");
+    const [selectedCategory, setSelectedCategory] = useState("");
+    const [selectedBrand, setSelectedBrand] = useState("");
+
+    const [minPrice, setMinPrice] = useState(0);
+    const [maxPrice, setMaxPrice] = useState(0);
+    const [priceMin, setPriceMin] = useState(0);
+    const [priceMax, setPriceMax] = useState(0);
 
     // Edit product state
     const [editingProduct, setEditingProduct] = useState(null);
@@ -22,13 +35,14 @@ function Products() {
     const [editBrandId, setEditBrandId] = useState("");
     const [editCategoryId, setEditCategoryId] = useState("");
     const [editPrice, setEditPrice] = useState("");
-    const [editStock, setEditStock] = useState("");
+   
 
     const [saving, setSaving] = useState(false);
     const [deletingId, setDeletingId] = useState(null);
 
     useEffect(() => {
         fetchProducts();
+        fetchEditOptions();
     }, []);
 
     const fetchProducts = async () => {
@@ -38,35 +52,89 @@ function Products() {
 
             const businessId = await getCurrentBusinessId();
 
-            const { data, error } = await supabase
-                .from("products")
-                .select(`
-                    id,
-                    name,
-                    price,
-                    stock,
-                    created_at,
-                    updated_at,
-                    brand_id,
-                    category_id,
-                    brands (
+            // Fetch products and their inventory units together.
+            const [
+                { data: productData, error: productError },
+                { data: inventoryData, error: inventoryError },
+            ] = await Promise.all([
+                supabase
+                    .from("products")
+                    .select(`
                         id,
-                        name
-                    ),
-                    categories (
-                        id,
-                        name
-                    )
-                `)
-                .eq("business_id", businessId)
-                .order("id", { ascending: true });
+                        name,
+                        price,
+                        stock,
+                        created_at,
+                        updated_at,
+                        brand_id,
+                        category_id,
+                        brands (
+                            id,
+                            name
+                        ),
+                        categories (
+                            id,
+                            name
+                        )
+                    `)
+                    .eq("business_id", businessId)
+                    .order("id", { ascending: true }),
 
-            if (error) {
-                throw error;
+                supabase
+                    .from("product_inventory")
+                    .select("product_id, status")
+                    .eq("business_id", businessId),
+            ]);
+
+            if (productError) {
+                throw productError;
             }
 
-            setProducts(data || []);
+            if (inventoryError) {
+                throw inventoryError;
+            }
 
+            // Count only AVAILABLE physical inventory units
+            // for each product.
+            const availableStockMap = {};
+
+            (inventoryData || []).forEach((item) => {
+                if (item.status === "available") {
+                    availableStockMap[item.product_id] =
+                        (availableStockMap[item.product_id] || 0) + 1;
+                }
+            });
+
+            // Attach calculated inventory stock to each product.
+            const productsWithInventoryStock = (productData || []).map(
+                (product) => ({
+                    ...product,
+                    availableStock:
+                        availableStockMap[product.id] || 0,
+                })
+            );
+
+            setProducts(productsWithInventoryStock);
+
+            const prices = (productData || [])
+                .map((product) => Number(product.price))
+                .filter((price) => Number.isFinite(price));
+
+            if (prices.length > 0) {
+                const lowestPrice = Math.min(...prices);
+                const highestPrice = Math.max(...prices);
+
+                setPriceMin(lowestPrice);
+                setPriceMax(highestPrice);
+
+                setMinPrice(lowestPrice);
+                setMaxPrice(highestPrice);
+            } else {
+                setPriceMin(0);
+                setPriceMax(0);
+                setMinPrice(0);
+                setMaxPrice(0);
+            }
         } catch (error) {
             console.error("Fetch products error:", error);
 
@@ -77,6 +145,44 @@ function Products() {
             setLoading(false);
         }
     };
+
+    const filteredProducts = useMemo(() => {
+        return products.filter((product) => {
+            const productName = product.name?.toLowerCase() || "";
+            const searchValue = search.trim().toLowerCase();
+
+            const matchesSearch =
+                productName.includes(searchValue);
+
+            const matchesCategory =
+                !selectedCategory ||
+                product.category_id === selectedCategory;
+
+            const matchesBrand =
+                !selectedBrand ||
+                product.brand_id === selectedBrand;
+
+            const productPrice = Number(product.price);
+
+            const matchesPrice =
+                productPrice >= minPrice &&
+                productPrice <= maxPrice;
+
+            return (
+                matchesSearch &&
+                matchesCategory &&
+                matchesBrand &&
+                matchesPrice
+            );
+        });
+    }, [
+        products,
+        search,
+        selectedCategory,
+        selectedBrand,
+        minPrice,
+        maxPrice,
+    ]);
 
     const fetchEditOptions = async () => {
         try {
@@ -109,12 +215,12 @@ function Products() {
 
             setBrands(brandData || []);
             setCategories(categoryData || []);
-
         } catch (error) {
             console.error("Fetch edit options error:", error);
 
             setError(
-                error.message || "Failed to load brands and categories."
+                error.message ||
+                    "Failed to load brands and categories."
             );
         }
     };
@@ -128,7 +234,8 @@ function Products() {
         setEditBrandId(product.brand_id || "");
         setEditCategoryId(product.category_id || "");
         setEditPrice(product.price ?? "");
-        setEditStock(product.stock ?? "");
+
+      
 
         await fetchEditOptions();
     };
@@ -144,7 +251,7 @@ function Products() {
         setEditBrandId("");
         setEditCategoryId("");
         setEditPrice("");
-        setEditStock("");
+       
     };
 
     const handleUpdate = async (e) => {
@@ -172,10 +279,7 @@ function Products() {
             return;
         }
 
-        if (editStock === "" || Number(editStock) < 0) {
-            setError("Please enter a valid stock quantity.");
-            return;
-        }
+       
 
         try {
             setSaving(true);
@@ -189,7 +293,7 @@ function Products() {
                     brand_id: editBrandId,
                     category_id: editCategoryId,
                     price: Number(editPrice),
-                    stock: Number(editStock),
+                    
                     updated_at: new Date().toISOString(),
                 })
                 .eq("id", editingProduct.id)
@@ -202,7 +306,6 @@ function Products() {
             closeEditModal();
 
             await fetchProducts();
-
         } catch (error) {
             console.error("Update product error:", error);
 
@@ -244,7 +347,6 @@ function Products() {
                     (item) => item.id !== product.id
                 )
             );
-
         } catch (error) {
             console.error("Delete product error:", error);
 
@@ -258,419 +360,129 @@ function Products() {
 
     return (
         <div className="min-h-screen bg-background flex">
-
             <Sidebar />
 
-            <main className="flex-1 p-8">
-
-                <div className="flex items-center justify-between mb-8">
-
-                    <div>
-                        <h1 className="text-3xl font-bold text-text">
+            <main className="flex-1 min-w-0 p-3 sm:p-6 lg:p-8">
+                {/* Page Header */}
+                <div className="mb-6 flex flex-col gap-4 lg:mb-8 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="min-w-0">
+                        <h1 className="text-2xl font-bold text-text sm:text-3xl">
                             Products
                         </h1>
 
-                        <p className="mt-1 text-gray-500">
+                        <p className="mt-1 text-sm text-gray-500 sm:text-base">
                             Manage your products and stock.
                         </p>
                     </div>
 
-                    <div className="flex gap-3">
-
+                    <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 lg:w-auto lg:flex lg:flex-wrap lg:gap-3">
                         <button
+                            type="button"
                             onClick={() => navigate("/products/add")}
-                            className="bg-primary text-white px-5 py-3 rounded-xl font-semibold hover:opacity-90"
+                            className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:opacity-90 sm:px-5 sm:text-base lg:w-auto"
                         >
                             + Add Product
                         </button>
 
                         <button
+                            type="button"
                             onClick={() => navigate("/products/brands")}
-                            className="border border-primary text-primary px-5 py-3 rounded-xl font-semibold hover:bg-primary/10"
+                            className="w-full rounded-xl border border-primary px-4 py-3 text-sm font-semibold text-primary transition hover:bg-primary/10 sm:px-5 sm:text-base lg:w-auto"
                         >
                             Manage Brands
                         </button>
 
                         <button
+                            type="button"
                             onClick={() => navigate("/products/categories")}
-                            className="border border-primary text-primary px-5 py-3 rounded-xl font-semibold hover:bg-primary/10"
+                            className="w-full rounded-xl border border-primary px-4 py-3 text-sm font-semibold text-primary transition hover:bg-primary/10 sm:px-5 sm:text-base lg:w-auto"
                         >
                             Manage Categories
                         </button>
 
                         <button
-                            onClick={() => navigate("/products/bulk-upload")}
-                            className="border border-primary text-primary px-5 py-3 rounded-xl font-semibold hover:bg-primary/10"
+                            type="button"
+                            onClick={() =>
+                                navigate("/products/bulk-upload")
+                            }
+                            className="w-full rounded-xl border border-primary px-4 py-3 text-sm font-semibold text-primary transition hover:bg-primary/10 sm:px-5 sm:text-base lg:w-auto"
                         >
                             Bulk Upload
                         </button>
-
                     </div>
-
                 </div>
 
+                {/* Error */}
                 {error && (
-                    <div className="mb-5 p-4 rounded-xl bg-red-50 text-red-600">
+                    <div className="mb-5 rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-600">
                         {error}
                     </div>
                 )}
 
-                <div className="bg-card rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                {/* Filters */}
+                <ProductFilters
+                    search={search}
+                    setSearch={setSearch}
+                    selectedCategory={selectedCategory}
+                    setSelectedCategory={setSelectedCategory}
+                    selectedBrand={selectedBrand}
+                    setSelectedBrand={setSelectedBrand}
+                    minPrice={minPrice}
+                    setMinPrice={setMinPrice}
+                    maxPrice={maxPrice}
+                    setMaxPrice={setMaxPrice}
+                    categories={categories}
+                    brands={brands}
+                    priceMin={priceMin}
+                    priceMax={priceMax}
+                    onClearFilters={() => {
+                        setSearch("");
+                        setSelectedCategory("");
+                        setSelectedBrand("");
+                        setMinPrice(priceMin);
+                        setMaxPrice(priceMax);
+                    }}
+                />
 
-                    <div className="p-6">
-
-                        <h2 className="text-xl font-bold text-text">
+                {/* Product List */}
+                <div className="mt-6 overflow-hidden rounded-2xl border border-gray-100 bg-card shadow-sm sm:mt-8">
+                    <div className="p-4 sm:p-6">
+                        <h2 className="text-lg font-bold text-text sm:text-xl">
                             Product List
                         </h2>
 
-                        <p className="text-sm text-gray-500 mt-1">
+                        <p className="mt-1 text-sm text-gray-500">
                             Products added to your business.
                         </p>
-
                     </div>
 
-                    <div className="overflow-x-auto">
-
-                        <table className="w-full">
-
-                            <thead className="bg-gray-50 border-y border-gray-200">
-
-                                <tr>
-
-                                    <th className="text-left px-6 py-4 text-sm font-semibold text-gray-600">
-                                        ID
-                                    </th>
-
-                                    <th className="text-left px-6 py-4 text-sm font-semibold text-gray-600">
-                                        Product
-                                    </th>
-
-                                    <th className="text-left px-6 py-4 text-sm font-semibold text-gray-600">
-                                        Brand
-                                    </th>
-
-                                    <th className="text-left px-6 py-4 text-sm font-semibold text-gray-600">
-                                        Category
-                                    </th>
-
-                                    <th className="text-left px-6 py-4 text-sm font-semibold text-gray-600">
-                                        Price
-                                    </th>
-
-                                    <th className="text-left px-6 py-4 text-sm font-semibold text-gray-600">
-                                        Stock
-                                    </th>
-
-                                    <th className="text-left px-6 py-4 text-sm font-semibold text-gray-600">
-                                        Barcode
-                                    </th>
-
-                                    <th className="text-left px-6 py-4 text-sm font-semibold text-gray-600">
-                                        Actions
-                                    </th>
-
-                                </tr>
-
-                            </thead>
-
-                            <tbody>
-
-                                {loading ? (
-
-                                    <tr>
-                                        <td
-                                            colSpan="8"
-                                            className="text-center py-16 text-gray-400"
-                                        >
-                                            Loading products...
-                                        </td>
-                                    </tr>
-
-                                ) : products.length === 0 ? (
-
-                                    <tr>
-                                        <td
-                                            colSpan="8"
-                                            className="text-center py-16 text-gray-400"
-                                        >
-                                            No products added yet.
-                                        </td>
-                                    </tr>
-
-                                ) : (
-
-                                    products.map((product) => (
-
-                                        <tr
-                                            key={product.id}
-                                            className="border-b border-gray-100"
-                                        >
-
-                                            <td className="px-6 py-4 font-medium">
-                                                {product.id}
-                                            </td>
-
-                                            <td className="px-6 py-4">
-                                                {product.name}
-                                            </td>
-
-                                            <td className="px-6 py-4">
-                                                {product.brands?.name || "-"}
-                                            </td>
-
-                                            <td className="px-6 py-4">
-                                                {product.categories?.name || "-"}
-                                            </td>
-
-                                            <td className="px-6 py-4">
-                                                ₹{product.price}
-                                            </td>
-
-                                            <td className="px-6 py-4">
-                                                {product.stock}
-                                            </td>
-
-                                            <td className="px-6 py-4">
-                                                <Barcode
-                                                    value={String(product.id)}
-                                                    format="CODE128"
-                                                    width={1.5}
-                                                    height={45}
-                                                    displayValue={true}
-                                                    fontSize={12}
-                                                    margin={0}
-                                                />
-                                            </td>
-
-                                            <td className="px-6 py-4">
-
-                                                <div className="flex gap-2">
-
-                                                    <button
-                                                        onClick={() =>
-                                                            handleEdit(product)
-                                                        }
-                                                        className="px-3 py-2 rounded-lg bg-primary text-white text-sm font-semibold hover:opacity-90"
-                                                    >
-                                                        Edit
-                                                    </button>
-
-                                                    <button
-                                                        onClick={() =>
-                                                            handleDelete(product)
-                                                        }
-                                                        disabled={
-                                                            deletingId === product.id
-                                                        }
-                                                        className="px-3 py-2 rounded-lg bg-red-500 text-white text-sm font-semibold hover:bg-red-600 disabled:opacity-60"
-                                                    >
-                                                        {deletingId === product.id
-                                                            ? "Deleting..."
-                                                            : "Delete"}
-                                                    </button>
-
-                                                </div>
-
-                                            </td>
-
-                                        </tr>
-
-                                    ))
-
-                                )}
-
-                            </tbody>
-
-                        </table>
-
-                    </div>
-
+                    <ProductTable
+                        filteredProducts={filteredProducts}
+                        loading={loading}
+                        onEdit={handleEdit}
+                        onDelete={handleDelete}
+                        deletingId={deletingId}
+                    />
                 </div>
-
             </main>
 
-            {/* EDIT PRODUCT MODAL */}
-
-            {editingProduct && (
-                <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-
-                    <div className="bg-card w-full max-w-2xl rounded-2xl shadow-xl p-8 max-h-[90vh] overflow-y-auto">
-
-                        <div className="flex items-center justify-between">
-
-                            <div>
-
-                                <h2 className="text-2xl font-bold text-text">
-                                    Edit Product
-                                </h2>
-
-                                <p className="text-sm text-gray-500 mt-1">
-                                    Product ID: {editingProduct.id}
-                                </p>
-
-                            </div>
-
-                            <button
-                                onClick={closeEditModal}
-                                className="text-gray-500 hover:text-gray-800 text-2xl"
-                            >
-                                ×
-                            </button>
-
-                        </div>
-
-                        <form
-                            onSubmit={handleUpdate}
-                            className="mt-6"
-                        >
-
-                            <div>
-
-                                <label className="block text-sm font-medium text-text mb-2">
-                                    Product Name
-                                </label>
-
-                                <input
-                                    type="text"
-                                    value={editName}
-                                    onChange={(e) =>
-                                        setEditName(e.target.value)
-                                    }
-                                    className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:border-primary focus:ring-4 focus:ring-primary/20"
-                                />
-
-                            </div>
-
-                            <div className="mt-5">
-
-                                <label className="block text-sm font-medium text-text mb-2">
-                                    Brand
-                                </label>
-
-                                <select
-                                    value={editBrandId}
-                                    onChange={(e) =>
-                                        setEditBrandId(e.target.value)
-                                    }
-                                    className="w-full rounded-xl border border-gray-300 px-4 py-3 bg-white outline-none focus:border-primary focus:ring-4 focus:ring-primary/20"
-                                >
-
-                                    <option value="">
-                                        Select Brand
-                                    </option>
-
-                                    {brands.map((brand) => (
-                                        <option
-                                            key={brand.id}
-                                            value={brand.id}
-                                        >
-                                            {brand.name}
-                                        </option>
-                                    ))}
-
-                                </select>
-
-                            </div>
-
-                            <div className="mt-5">
-
-                                <label className="block text-sm font-medium text-text mb-2">
-                                    Category
-                                </label>
-
-                                <select
-                                    value={editCategoryId}
-                                    onChange={(e) =>
-                                        setEditCategoryId(e.target.value)
-                                    }
-                                    className="w-full rounded-xl border border-gray-300 px-4 py-3 bg-white outline-none focus:border-primary focus:ring-4 focus:ring-primary/20"
-                                >
-
-                                    <option value="">
-                                        Select Category
-                                    </option>
-
-                                    {categories.map((category) => (
-                                        <option
-                                            key={category.id}
-                                            value={category.id}
-                                        >
-                                            {category.name}
-                                        </option>
-                                    ))}
-
-                                </select>
-
-                            </div>
-
-                            <div className="mt-5">
-
-                                <label className="block text-sm font-medium text-text mb-2">
-                                    Price
-                                </label>
-
-                                <input
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    value={editPrice}
-                                    onChange={(e) =>
-                                        setEditPrice(e.target.value)
-                                    }
-                                    className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:border-primary focus:ring-4 focus:ring-primary/20"
-                                />
-
-                            </div>
-
-                            <div className="mt-5">
-
-                                <label className="block text-sm font-medium text-text mb-2">
-                                    Stock
-                                </label>
-
-                                <input
-                                    type="number"
-                                    min="0"
-                                    step="1"
-                                    value={editStock}
-                                    onChange={(e) =>
-                                        setEditStock(e.target.value)
-                                    }
-                                    className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:border-primary focus:ring-4 focus:ring-primary/20"
-                                />
-
-                            </div>
-
-                            <div className="mt-8 flex justify-end gap-3">
-
-                                <button
-                                    type="button"
-                                    onClick={closeEditModal}
-                                    disabled={saving}
-                                    className="px-5 py-3 rounded-xl border border-gray-300 font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-60"
-                                >
-                                    Cancel
-                                </button>
-
-                                <button
-                                    type="submit"
-                                    disabled={saving}
-                                    className="px-5 py-3 rounded-xl bg-primary text-white font-semibold disabled:opacity-60"
-                                >
-                                    {saving
-                                        ? "Saving..."
-                                        : "Save Changes"}
-                                </button>
-
-                            </div>
-
-                        </form>
-
-                    </div>
-
-                </div>
-            )}
-
+            <EditProductModal
+                editingProduct={editingProduct}
+                editName={editName}
+                setEditName={setEditName}
+                editBrandId={editBrandId}
+                setEditBrandId={setEditBrandId}
+                editCategoryId={editCategoryId}
+                setEditCategoryId={setEditCategoryId}
+                editPrice={editPrice}
+                setEditPrice={setEditPrice}
+                
+                brands={brands}
+                categories={categories}
+                saving={saving}
+                onSubmit={handleUpdate}
+                onClose={closeEditModal}
+            />
         </div>
     );
 }

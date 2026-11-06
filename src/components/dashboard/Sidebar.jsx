@@ -1,5 +1,7 @@
 import { NavLink } from "react-router-dom";
+
 import { useAuth } from "../../context/AuthContext";
+
 import {
     LayoutDashboard,
     Package,
@@ -10,8 +12,8 @@ import {
 } from "lucide-react";
 
 function Sidebar() {
-
     const { logout } = useAuth();
+
     const menuItems = [
         {
             name: "Dashboard",
@@ -35,18 +37,18 @@ function Sidebar() {
         },
     ];
 
-
     return (
-        <aside className="w-64 min-h-screen bg-card border-r border-gray-200 flex flex-col">
-
-            <div className="p-6 border-b border-gray-200">
-                <h1 className="text-2xl font-bold text-primary">
-                    QUEIFY
+        <aside className="w-[72px] md:w-64 min-h-screen bg-card border-r border-gray-200 flex flex-col shrink-0">
+            {/* Logo */}
+            <div className="h-[76px] flex items-center justify-center md:justify-start px-3 md:px-6 border-b border-gray-200">
+                <h1 className="text-xl md:text-2xl font-bold text-primary">
+                    <span className="md:hidden">Q</span>
+                    <span className="hidden md:inline">QUEIFY</span>
                 </h1>
             </div>
 
-            <nav className="flex-1 p-4 space-y-2">
-
+            {/* Main Navigation */}
+            <nav className="flex-1 p-2 md:p-4 space-y-2">
                 {menuItems.map((item) => {
                     const Icon = item.icon;
 
@@ -54,41 +56,51 @@ function Sidebar() {
                         <NavLink
                             key={item.path}
                             to={item.path}
+                            title={item.name}
                             className={({ isActive }) =>
-                                `flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition ${isActive
-                                    ? "bg-primary text-white"
-                                    : "text-gray-600 hover:bg-gray-100"
+                                `flex items-center justify-center md:justify-start gap-3 px-3 md:px-4 py-3 rounded-xl font-medium transition ${
+                                    isActive
+                                        ? "bg-primary text-white"
+                                        : "text-gray-600 hover:bg-gray-100"
                                 }`
                             }
                         >
                             <Icon size={20} />
-                            {item.name}
+
+                            <span className="hidden md:inline">
+                                {item.name}
+                            </span>
                         </NavLink>
                     );
                 })}
-
             </nav>
 
-            <div className="p-4 border-t border-gray-200 space-y-2">
-
+            {/* Bottom Navigation */}
+            <div className="p-2 md:p-4 border-t border-gray-200 space-y-2">
                 <NavLink
                     to="/profile"
-                    className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-gray-100"
+                    title="Profile"
+                    className="flex items-center justify-center md:justify-start gap-3 px-3 md:px-4 py-3 rounded-xl text-gray-600 hover:bg-gray-100"
                 >
                     <User size={20} />
-                    Profile
+
+                    <span className="hidden md:inline">
+                        Profile
+                    </span>
                 </NavLink>
 
                 <button
                     onClick={logout}
-                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-500 hover:bg-red-50"
+                    title="Logout"
+                    className="w-full flex items-center justify-center md:justify-start gap-3 px-3 md:px-4 py-3 rounded-xl text-red-500 hover:bg-red-50"
                 >
                     <LogOut size={20} />
-                    Logout
+
+                    <span className="hidden md:inline">
+                        Logout
+                    </span>
                 </button>
-
             </div>
-
         </aside>
     );
 }
